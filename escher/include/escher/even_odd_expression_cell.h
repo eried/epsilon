@@ -10,16 +10,22 @@ public:
     KDColor textColor = KDColorBlack, KDColor backgroundColor = KDColorWhite);
   void setEven(bool even) override;
   void setHighlighted(bool highlight) override;
-  void setExpression(Poincare::ExpressionLayout * expressionLayout);
+  void setExpressionLayout(Poincare::ExpressionLayout * expressionLayout);
   void setBackgroundColor(KDColor backgroundColor);
   void setTextColor(KDColor textColor);
   KDSize minimalSizeForOptimalDisplay() const override;
   void setAlignment(float horizontalAlignment, float verticalAlignment);
+  void setLeftMargin(KDCoordinate margin);
+  void setRightMargin(KDCoordinate margin);
+  Poincare::ExpressionLayout * expressionLayout() const override { return m_expressionView.expressionLayout(); }
+  void drawRect(KDContext * ctx, KDRect rect) const override;
+protected:
   int numberOfSubviews() const override;
   View * subviewAtIndex(int index) override;
   void layoutSubviews() override;
-protected:
   ExpressionView m_expressionView;
+  KDCoordinate m_leftMargin;
+  KDCoordinate m_rightMargin;
 };
 
 #endif

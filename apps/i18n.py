@@ -1,18 +1,20 @@
-#!/usr/bin/python
 #coding=utf-8
 
 import sys
 import re
 import unicodedata
-from sets import Set
 import argparse
+import io
 
 ion_special_characters = {
+    u'Δ': "Ion::Charset::CapitalDelta",
     u'Σ': "Ion::Charset::CapitalSigma",
     u'λ': "Ion::Charset::SmallLambda",
     u'μ': "Ion::Charset::SmallMu",
     u'σ': "Ion::Charset::SmallSigma",
-    u'≤': "Ion::Charset::LessEqual"
+    u'≤': "Ion::Charset::LessEqual",
+    u'≈': "Ion::Charset::AlmostEqual",
+    u'•': "Ion::Charset::Empty"
 }
 
 def ion_char(i18n_letter):
@@ -24,12 +26,19 @@ def ion_char(i18n_letter):
         return ion_special_characters[i18n_letter]
     normalized = unicodedata.normalize("NFD", i18n_letter).encode('ascii', 'ignore')
     #sys.stderr.write("Warning: Normalizing unicode character \"" + i18n_letter + "\" -> \"" + normalized + "\"\n")
-    return "'" + normalized + "'"
+    return "'" + normalized.decode() + "'"
 
 def source_definition(i18n_string):
     ion_characters = []
-    for i18n_letter in i18n_string.decode('utf8'):
-        ion_characters.append(ion_char(i18n_letter))
+    i = 0
+    while i < len(i18n_string):
+        if i18n_string[i] == '\\':
+            i = i+1
+            newChar = "'\\"+i18n_string[i]+"'"
+            ion_characters.append(newChar)
+        else:
+            ion_characters.append(ion_char(i18n_string[i]))
+        i = i+1
     ion_characters.append("0")
     return "{" + ", ".join(ion_characters) + "}"
 
@@ -45,13 +54,13 @@ def locale_from_filename(filename):
 
 def parse_files(files):
     data = {}
-    messages = Set()
-    universal_messages = Set()
+    messages = set()
+    universal_messages = set()
     for path in files:
         locale = locale_from_filename(path)
         if locale not in data:
             data[locale] = {}
-        with open(path, "r") as file:
+        with io.open(path, "r", encoding='utf-8') as file:
             for line in file:
                 name,definition = split_line(line)
                 if locale == "universal":
@@ -141,11 +150,12 @@ def print_implementation(data, path, locales):
     f.write("};\n")
     f.write("\n")
     f.write("const char * translate(Message m, Language l) {\n")
+    f.write("  assert(m != Message::UniversalMessageMarker);\n")
     f.write("  int universalMessageOffset = (int)Message::UniversalMessageMarker+1;\n")
     f.write("  if ((int)m >= universalMessageOffset) {\n")
     f.write("    assert(universalMessages[(int)m - universalMessageOffset] != nullptr);\n")
     f.write("    return universalMessages[(int)m - universalMessageOffset];\n")
-    f.write("  }")
+    f.write("  }\n")
     f.write("  int languageIndex = (int)l;\n")
     f.write("  if (l == Language::Default) {\n")
     f.write("    languageIndex = (int) GlobalPreferences::sharedGlobalPreferences()->language();\n")

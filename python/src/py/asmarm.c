@@ -1,5 +1,5 @@
 /*
- * This file is part of the Micro Python project, http://micropython.org/
+ * This file is part of the MicroPython project, http://micropython.org/
  *
  * The MIT License (MIT)
  *
@@ -150,10 +150,7 @@ void asm_arm_bkpt(asm_arm_t *as) {
 //  | low address    | high address in RAM
 
 void asm_arm_entry(asm_arm_t *as, int num_locals) {
-
-    if (num_locals < 0) {
-        num_locals = 0;
-    }
+    assert(num_locals >= 0);
 
     as->stack_adjust = 0;
     as->push_reglist = 1 << ASM_ARM_REG_R1

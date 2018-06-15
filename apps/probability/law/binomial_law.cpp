@@ -61,7 +61,7 @@ float BinomialLaw::yMin() {
 float BinomialLaw::yMax() {
   int maxAbscissa = m_parameter2 < 1.0f ? (m_parameter1+1)*m_parameter2 : m_parameter1;
   float result = evaluateAtAbscissa(maxAbscissa);
-  if (result <= 0.0f || isnan(result)) {
+  if (result <= 0.0f || std::isnan(result)) {
     result = 1.0f;
   }
   return result*(1.0f+ k_displayTopMarginRatio);
@@ -70,7 +70,14 @@ float BinomialLaw::yMax() {
 
 bool BinomialLaw::authorizedValueAtIndex(float x, int index) const {
   if (index == 0) {
-    if (x != (int)x || x < 0.0f || x > 999.0f) {
+    /* As the cumulative probability are computed by looping over all discrete
+     * abscissa within the interesting range, the complexity of the cumulative
+     * probability is linear with the size of the range. Here we cap the maximal
+     * size of the range to 10000. If one day we want to increase or get rid of
+     *  this cap, we should implement the explicite formula of the cumulative
+     *  probability (which depends on an incomplete beta function) to make the
+     *  comlexity O(1). */
+    if (x != (int)x || x < 0.0f || x > 99999.0f) {
       return false;
     }
     return true;
@@ -102,7 +109,7 @@ double BinomialLaw::rightIntegralInverseForProbability(double * probability) {
 }
 
 template<typename T>
-T BinomialLaw::templatedEvaluateAtAbscissa(T x) const {
+T BinomialLaw::templatedApproximateAtAbscissa(T x) const {
   if (m_parameter1 == 0) {
     if (m_parameter2 == 0 || m_parameter2 == 1) {
       return NAN;
@@ -127,12 +134,12 @@ T BinomialLaw::templatedEvaluateAtAbscissa(T x) const {
   if (x > m_parameter1) {
     return 0;
   }
-  T lResult = std::lgamma(m_parameter1+1) - std::lgamma(std::floor(x)+1) - std::lgamma((T)m_parameter1 - std::floor(x)+1)+
-    std::floor(x)*std::log(m_parameter2) + (m_parameter1-std::floor(x))*std::log(1-m_parameter2);
+  T lResult = std::lgamma((T)(m_parameter1+1.0)) - std::lgamma(std::floor(x)+(T)1.0) - std::lgamma((T)m_parameter1 - std::floor(x)+(T)1.0)+
+    std::floor(x)*std::log((T)m_parameter2) + ((T)m_parameter1-std::floor(x))*std::log((T)(1.0-m_parameter2));
   return std::exp(lResult);
 }
 
 }
 
-template float Probability::BinomialLaw::templatedEvaluateAtAbscissa(float x) const;
-template double Probability::BinomialLaw::templatedEvaluateAtAbscissa(double x) const;
+template float Probability::BinomialLaw::templatedApproximateAtAbscissa(float x) const;
+template double Probability::BinomialLaw::templatedApproximateAtAbscissa(double x) const;

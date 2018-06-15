@@ -5,10 +5,12 @@
 
 namespace Shared {
 
-class CursorView : public View {
+class CursorView : public TransparentView {
 public:
-  using View::View;
   void drawRect(KDContext * ctx, KDRect rect) const override;
+  KDSize minimalSizeForOptimalDisplay() const override;
+private:
+  constexpr static KDCoordinate k_size = 19;
 };
 
 }

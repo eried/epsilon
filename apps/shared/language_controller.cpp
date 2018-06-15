@@ -7,8 +7,10 @@ namespace Shared {
 
 LanguageController::LanguageController(Responder * parentResponder, KDCoordinate topMargin) :
   ViewController(parentResponder),
-  m_selectableTableView(this, this, 0, 1, topMargin, Metric::CommonRightMargin, 0, Metric::CommonLeftMargin, this)
+  m_selectableTableView(this, this, this)
 {
+  m_selectableTableView.setTopMargin(topMargin);
+  m_selectableTableView.setBottomMargin(0);
   for (int i = 0; i < I18n::NumberOfLanguages; i++) {
     m_cells[i].setMessageFontSize(KDText::FontSize::Large);
   }
@@ -39,6 +41,8 @@ void LanguageController::viewWillAppear() {
 bool LanguageController::handleEvent(Ion::Events::Event event) {
   if (event == Ion::Events::OK || event == Ion::Events::EXE) {
     GlobalPreferences::sharedGlobalPreferences()->setLanguage((I18n::Language)(selectedRow()+1));
+    AppsContainer * myContainer = (AppsContainer * )app()->container();
+    myContainer->refreshPreferences();
     return true;
   }
   return false;

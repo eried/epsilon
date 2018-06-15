@@ -1,5 +1,5 @@
 /*
- * This file is part of the Micro Python project, http://micropython.org/
+ * This file is part of the MicroPython project, http://micropython.org/
  *
  * The MIT License (MIT)
  *
@@ -35,7 +35,7 @@
 #define MP_STREAM_FLUSH (1)
 #define MP_STREAM_SEEK  (2)
 #define MP_STREAM_POLL  (3)
-//#define MP_STREAM_CLOSE       (4)  // Not yet implemented
+#define MP_STREAM_CLOSE         (4)
 #define MP_STREAM_TIMEOUT       (5)  // Get/set timeout (single op)
 #define MP_STREAM_GET_OPTS      (6)  // Get stream options
 #define MP_STREAM_SET_OPTS      (7)  // Set stream options
@@ -50,9 +50,17 @@
 
 // Argument structure for MP_STREAM_SEEK
 struct mp_stream_seek_t {
+    // If whence == MP_SEEK_SET, offset should be treated as unsigned.
+    // This allows dealing with full-width stream sizes (16, 32, 64,
+    // etc. bits). For other seek types, should be treated as signed.
     mp_off_t offset;
     int whence;
 };
+
+// seek ioctl "whence" values
+#define MP_SEEK_SET (0)
+#define MP_SEEK_CUR (1)
+#define MP_SEEK_END (2)
 
 MP_DECLARE_CONST_FUN_OBJ_VAR_BETWEEN(mp_stream_read_obj);
 MP_DECLARE_CONST_FUN_OBJ_VAR_BETWEEN(mp_stream_read1_obj);
@@ -61,6 +69,7 @@ MP_DECLARE_CONST_FUN_OBJ_VAR_BETWEEN(mp_stream_unbuffered_readline_obj);
 MP_DECLARE_CONST_FUN_OBJ_1(mp_stream_unbuffered_readlines_obj);
 MP_DECLARE_CONST_FUN_OBJ_VAR_BETWEEN(mp_stream_write_obj);
 MP_DECLARE_CONST_FUN_OBJ_2(mp_stream_write1_obj);
+MP_DECLARE_CONST_FUN_OBJ_1(mp_stream_close_obj);
 MP_DECLARE_CONST_FUN_OBJ_VAR_BETWEEN(mp_stream_seek_obj);
 MP_DECLARE_CONST_FUN_OBJ_1(mp_stream_tell_obj);
 MP_DECLARE_CONST_FUN_OBJ_1(mp_stream_flush_obj);
@@ -98,7 +107,7 @@ int mp_stream_posix_fsync(mp_obj_t stream);
 #endif
 
 #if MICROPY_STREAMS_NON_BLOCK
-#define mp_is_nonblocking_error(errno) ((errno) == EAGAIN || (errno) == EWOULDBLOCK)
+#define mp_is_nonblocking_error(errno) ((errno) == MP_EAGAIN || (errno) == MP_EWOULDBLOCK)
 #else
 #define mp_is_nonblocking_error(errno) (0)
 #endif

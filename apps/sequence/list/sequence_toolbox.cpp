@@ -1,6 +1,9 @@
 #include "sequence_toolbox.h"
-#include "../../../poincare/src/layout/baseline_relative_layout.h"
-#include "../../../poincare/src/layout/string_layout.h"
+#include "../sequence_store.h"
+#include "../../../poincare/src/layout/char_layout.h"
+#include "../../../poincare/src/layout/horizontal_layout.h"
+#include "../../../poincare/src/layout/vertical_offset_layout.h"
+#include <poincare/layout_engine.h>
 #include <assert.h>
 
 using namespace Poincare;
@@ -24,8 +27,8 @@ SequenceToolbox::~SequenceToolbox() {
 }
 
 bool SequenceToolbox::handleEvent(Ion::Events::Event event) {
-  if (selectedRow() < m_numberOfAddedCells) {
-    if ((event == Ion::Events::OK || event == Ion::Events::EXE) && stackDepth() == 0) {
+  if (selectedRow() < m_numberOfAddedCells && stackDepth() == 0) {
+    if (event == Ion::Events::OK || event == Ion::Events::EXE) {
       return selectAddedCell(selectedRow());
     }
     return false;
@@ -51,20 +54,9 @@ HighlightCell * SequenceToolbox::reusableCell(int index, int type) {
 }
 
 void SequenceToolbox::willDisplayCellForIndex(HighlightCell * cell, int index) {
-  if (typeAtLocation(0, index) == 2) {
-    ExpressionTableCell * myCell = (ExpressionTableCell *)cell;
-    myCell->setExpression(m_addedCellLayout[index]);
-    return;
-  } else {
+  if (typeAtLocation(0, index) != 2) {
     MathToolbox::willDisplayCellForIndex(cell, mathToolboxIndex(index));
   }
-}
-
-KDCoordinate SequenceToolbox::rowHeight(int j) {
-  if (typeAtLocation(0, j) == 2) {
-    return k_addedRowHeight;
-  }
-  return MathToolbox::rowHeight(mathToolboxIndex(j));
 }
 
 int SequenceToolbox::typeAtLocation(int i, int j) {
@@ -81,27 +73,48 @@ void SequenceToolbox::setExtraCells(const char * sequenceName, int recurrenceDep
       m_addedCellLayout[i] = nullptr;
     }
   }
-  m_numberOfAddedCells = recurrenceDepth;
+  /* If recurrenceDepth < 0, the user is setting the initial conditions so we
+   * do not want to add any cell in the toolbox. */
+  if (recurrenceDepth < 0) {
+    m_numberOfAddedCells = 0;
+    return;
+  }
+  /* The cells added reprensent the sequence at smaller ranks than its depth
+   * and the other sequence at ranks smaller or equal to the depth, ie:
+   * if the sequence is u(n+1), we add cells u(n), v(n), v(n+1).
+   * There is a special case for double recurrent sequences because we do not
+   * want to parse symbols u(n+2) or v(n+2). */
+  m_numberOfAddedCells = recurrenceDepth == 2 ? 2*recurrenceDepth : 2*recurrenceDepth+1;
+  int sequenceIndex = sequenceName == SequenceStore::k_sequenceNames[0] ? 0 : 1;
+  const char * otherSequenceName = SequenceStore::k_sequenceNames[1-sequenceIndex];
   for (int j = 0; j < recurrenceDepth; j++) {
-    m_addedCellLayout[j] = new BaselineRelativeLayout(new StringLayout(sequenceName, 1, KDText::FontSize::Large), new StringLayout((char *)(j == 0? "n" : "n+1"), strlen((char *)(j == 0? "n" : "n+1")), KDText::FontSize::Small), BaselineRelativeLayout::Type::Subscript);
+    const char * indice = j == 0 ? "n" : "n+1";
+    m_addedCellLayout[j] = new HorizontalLayout(
+        new CharLayout(sequenceName[0], KDText::FontSize::Large),
+        new VerticalOffsetLayout(LayoutEngine::createStringLayout(indice, strlen(indice), KDText::FontSize::Small), VerticalOffsetLayout::Type::Subscript, false),
+        false);
+    m_addedCellLayout[j+recurrenceDepth] = new HorizontalLayout(
+        new CharLayout(otherSequenceName[0], KDText::FontSize::Large),
+        new VerticalOffsetLayout(LayoutEngine::createStringLayout(indice, strlen(indice), KDText::FontSize::Small), VerticalOffsetLayout::Type::Subscript, false),
+        false);
+  }
+  if (recurrenceDepth < 2) {
+    const char * indice = recurrenceDepth == 0 ? "n" : (recurrenceDepth == 1 ? "n+1" : "n+2");
+    m_addedCellLayout[2*recurrenceDepth] = new HorizontalLayout(
+        new CharLayout(otherSequenceName[0], KDText::FontSize::Large),
+        new VerticalOffsetLayout(LayoutEngine::createStringLayout(indice, strlen(indice), KDText::FontSize::Small), VerticalOffsetLayout::Type::Subscript, false),
+        false);
+  }
+  for (int index = 0; index < k_maxNumberOfDisplayedRows; index++) {
+    m_addedCells[index].setExpressionLayout(m_addedCellLayout[index]);
   }
 }
 
 bool SequenceToolbox::selectAddedCell(int selectedRow){
-  char buffer[10];
-  BaselineRelativeLayout * layout = (BaselineRelativeLayout *)m_addedCellLayout[selectedRow];
-  StringLayout * nameLayout = (StringLayout *)layout->baseLayout();
-  StringLayout * subscriptLayout = (StringLayout *)layout->indiceLayout();
-  int currentChar = 0;
-  strlcpy(buffer, nameLayout->text(), strlen(nameLayout->text())+1);
-  currentChar += strlen(nameLayout->text());
-  buffer[currentChar++] = '(';
-  strlcpy(buffer+currentChar, subscriptLayout->text(), strlen(subscriptLayout->text())+1);
-  currentChar += strlen(subscriptLayout->text());
-  buffer[currentChar++] = ')';
-  buffer[currentChar] = 0;
-  sender()->insertTextAtLocation(buffer, sender()->cursorLocation());
-  sender()->setCursorLocation(sender()->cursorLocation()+currentChar);
+  int bufferSize = 10;
+  char buffer[bufferSize];
+  m_addedCellLayout[selectedRow]->writeTextInBuffer(buffer, bufferSize);
+  sender()->handleEventWithText(buffer);
   app()->dismissModalViewController();
   return true;
 }

@@ -25,11 +25,14 @@ void TabTableController::willExitResponderChain(Responder * nextFirstResponder) 
 }
 
 SelectableTableView * TabTableController::selectableTableView() {
-  return (SelectableTableView *)view();
+  return static_cast<SelectableTableView *>(view());
 }
 
 View * TabTableController::loadView() {
-  return new SelectableTableView(this, m_dataSource, 0, 0,  Metric::CommonTopMargin, Metric::CommonRightMargin, Metric::CommonBottomMargin, Metric::CommonLeftMargin, this, this, true, true, Palette::WallScreenDark);
+  SelectableTableView * selectableTableView = new SelectableTableView(this, m_dataSource, this);
+  selectableTableView->setBackgroundColor(Palette::WallScreenDark);
+  selectableTableView->setVerticalCellOverlap(0);
+  return selectableTableView;
 }
 
 void TabTableController::unloadView(View * view) {

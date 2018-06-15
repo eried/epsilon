@@ -6,6 +6,11 @@ extern "C" {
 
 namespace Poincare {
 
+ListData::ListData() :
+  m_numberOfOperands(0),
+  m_operands(new Expression*[0])
+{}
+
 ListData::ListData(Expression * operand) :
   m_numberOfOperands(1),
   m_operands(new Expression*[1])
@@ -16,7 +21,9 @@ ListData::ListData(Expression * operand) :
 
 ListData::~ListData() {
   for (int i=0; i<m_numberOfOperands; i++) {
-    delete m_operands[i];
+    if (m_operands[i]) {
+      delete m_operands[i];
+    }
   }
   delete[] m_operands;
 }
@@ -44,6 +51,12 @@ const Expression * ListData::operand(int i) const {
   assert(i >= 0);
   assert(i < m_numberOfOperands);
   return m_operands[i];
+}
+
+void ListData::detachOperands() {
+  for (int i = 0; i < m_numberOfOperands; i++) {
+    m_operands[i] = nullptr;
+  }
 }
 
 }

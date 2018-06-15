@@ -1,5 +1,5 @@
 /*
- * This file is part of the Micro Python project, http://micropython.org/
+ * This file is part of the MicroPython project, http://micropython.org/
  *
  * The MIT License (MIT)
  *
@@ -376,6 +376,7 @@ STATIC void c_assign_atom_expr(compiler_t *comp, mp_parse_node_struct_t *pns, as
                     EMIT(store_subscr);
                 }
             }
+            return;
         } else if (MP_PARSE_NODE_STRUCT_KIND(pns1) == PN_trailer_period) {
             assert(MP_PARSE_NODE_IS_ID(pns1->nodes[0]));
             if (assign_kind == ASSIGN_AUG_LOAD) {
@@ -387,16 +388,10 @@ STATIC void c_assign_atom_expr(compiler_t *comp, mp_parse_node_struct_t *pns, as
                 }
                 EMIT_ARG(store_attr, MP_PARSE_NODE_LEAF_ARG(pns1->nodes[0]));
             }
-        } else {
-            goto cannot_assign;
+            return;
         }
-    } else {
-        goto cannot_assign;
     }
 
-    return;
-
-cannot_assign:
     compile_syntax_error(comp, (mp_parse_node_t)pns, "can't assign to expression");
 }
 
@@ -569,7 +564,7 @@ STATIC void close_over_variables_etc(compiler_t *comp, scope_t *this_scope, int 
                 for (int j = 0; j < this_scope->id_info_len; j++) {
                     id_info_t *id2 = &this_scope->id_info[j];
                     if (id2->kind == ID_INFO_KIND_FREE && id->qst == id2->qst) {
-                        // in Micro Python we load closures using LOAD_FAST
+                        // in MicroPython we load closures using LOAD_FAST
                         EMIT_LOAD_FAST(id->qst, id->local_num);
                         nfree += 1;
                     }
@@ -613,13 +608,11 @@ STATIC void compile_funcdef_lambdef_param(compiler_t *comp, mp_parse_node_t pn) 
 
     } else {
         mp_parse_node_t pn_id;
-        mp_parse_node_t pn_colon;
         mp_parse_node_t pn_equal;
         if (pn_kind == -1) {
             // this parameter is just an id
 
             pn_id = pn;
-            pn_colon = MP_PARSE_NODE_NULL;
             pn_equal = MP_PARSE_NODE_NULL;
 
         } else if (pn_kind == PN_typedargslist_name) {
@@ -627,7 +620,7 @@ STATIC void compile_funcdef_lambdef_param(compiler_t *comp, mp_parse_node_t pn) 
 
             mp_parse_node_struct_t *pns = (mp_parse_node_struct_t*)pn;
             pn_id = pns->nodes[0];
-            pn_colon = pns->nodes[1];
+            //pn_colon = pns->nodes[1]; // unused
             pn_equal = pns->nodes[2];
 
         } else {
@@ -654,9 +647,9 @@ STATIC void compile_funcdef_lambdef_param(compiler_t *comp, mp_parse_node_t pn) 
 
             if (comp->have_star) {
                 comp->num_dict_params += 1;
-                // in Micro Python we put the default dict parameters into a dictionary using the bytecode
+                // in MicroPython we put the default dict parameters into a dictionary using the bytecode
                 if (comp->num_dict_params == 1) {
-                    // in Micro Python we put the default positional parameters into a tuple using the bytecode
+                    // in MicroPython we put the default positional parameters into a tuple using the bytecode
                     // we need to do this here before we start building the map for the default keywords
                     if (comp->num_default_params > 0) {
                         EMIT_ARG(build_tuple, comp->num_default_params);
@@ -676,9 +669,6 @@ STATIC void compile_funcdef_lambdef_param(compiler_t *comp, mp_parse_node_t pn) 
                 compile_node(comp, pn_equal);
             }
         }
-
-        // TODO pn_colon not implemented
-        (void)pn_colon;
     }
 }
 
@@ -700,7 +690,7 @@ STATIC void compile_funcdef_lambdef(compiler_t *comp, scope_t *scope, mp_parse_n
         return;
     }
 
-    // in Micro Python we put the default positional parameters into a tuple using the bytecode
+    // in MicroPython we put the default positional parameters into a tuple using the bytecode
     // the default keywords args may have already made the tuple; if not, do it now
     if (comp->num_default_params > 0 && comp->num_dict_params == 0) {
         EMIT_ARG(build_tuple, comp->num_default_params);
@@ -1055,8 +1045,8 @@ STATIC void do_import_name(compiler_t *comp, mp_parse_node_t pn, qstr *q_base) {
             for (int i = 0; i < n; i++) {
                 len += qstr_len(MP_PARSE_NODE_LEAF_ARG(pns->nodes[i]));
             }
-            byte *q_ptr;
-            byte *str_dest = qstr_build_start(len, &q_ptr);
+            char *q_ptr = mp_local_alloc(len);
+            char *str_dest = q_ptr;
             for (int i = 0; i < n; i++) {
                 if (i > 0) {
                     *str_dest++ = '.';
@@ -1066,7 +1056,8 @@ STATIC void do_import_name(compiler_t *comp, mp_parse_node_t pn, qstr *q_base) {
                 memcpy(str_dest, str_src, str_src_len);
                 str_dest += str_src_len;
             }
-            qstr q_full = qstr_build_end(q_ptr);
+            qstr q_full = qstr_from_strn(q_ptr, len);
+            mp_local_free(q_ptr);
             EMIT_ARG(import_name, q_full);
             if (is_as) {
                 for (int i = 1; i < n; i++) {
@@ -1945,51 +1936,52 @@ STATIC void compile_expr_stmt(compiler_t *comp, mp_parse_node_struct_t *pns) {
             }
         } else {
         plain_assign:
-            if (MICROPY_COMP_DOUBLE_TUPLE_ASSIGN
-                && MP_PARSE_NODE_IS_STRUCT_KIND(pns->nodes[1], PN_testlist_star_expr)
-                && MP_PARSE_NODE_IS_STRUCT_KIND(pns->nodes[0], PN_testlist_star_expr)
-                && MP_PARSE_NODE_STRUCT_NUM_NODES((mp_parse_node_struct_t*)pns->nodes[1]) == 2
-                && MP_PARSE_NODE_STRUCT_NUM_NODES((mp_parse_node_struct_t*)pns->nodes[0]) == 2) {
-                // optimisation for a, b = c, d
-                mp_parse_node_struct_t *pns10 = (mp_parse_node_struct_t*)pns->nodes[1];
+            #if MICROPY_COMP_DOUBLE_TUPLE_ASSIGN
+            if (MP_PARSE_NODE_IS_STRUCT_KIND(pns->nodes[1], PN_testlist_star_expr)
+                && MP_PARSE_NODE_IS_STRUCT_KIND(pns->nodes[0], PN_testlist_star_expr)) {
                 mp_parse_node_struct_t *pns0 = (mp_parse_node_struct_t*)pns->nodes[0];
-                if (MP_PARSE_NODE_IS_STRUCT_KIND(pns0->nodes[0], PN_star_expr)
-                    || MP_PARSE_NODE_IS_STRUCT_KIND(pns0->nodes[1], PN_star_expr)) {
-                    // can't optimise when it's a star expression on the lhs
-                    goto no_optimisation;
+                pns1 = (mp_parse_node_struct_t*)pns->nodes[1];
+                uint32_t n_pns0 = MP_PARSE_NODE_STRUCT_NUM_NODES(pns0);
+                // Can only optimise a tuple-to-tuple assignment when all of the following hold:
+                //  - equal number of items in LHS and RHS tuples
+                //  - 2 or 3 items in the tuples
+                //  - there are no star expressions in the LHS tuple
+                if (n_pns0 == MP_PARSE_NODE_STRUCT_NUM_NODES(pns1)
+                    && (n_pns0 == 2
+                        #if MICROPY_COMP_TRIPLE_TUPLE_ASSIGN
+                        || n_pns0 == 3
+                        #endif
+                        )
+                    && !MP_PARSE_NODE_IS_STRUCT_KIND(pns0->nodes[0], PN_star_expr)
+                    && !MP_PARSE_NODE_IS_STRUCT_KIND(pns0->nodes[1], PN_star_expr)
+                    #if MICROPY_COMP_TRIPLE_TUPLE_ASSIGN
+                    && (n_pns0 == 2 || !MP_PARSE_NODE_IS_STRUCT_KIND(pns0->nodes[2], PN_star_expr))
+                    #endif
+                    ) {
+                    // Optimisation for a, b = c, d or a, b, c = d, e, f
+                    compile_node(comp, pns1->nodes[0]); // rhs
+                    compile_node(comp, pns1->nodes[1]); // rhs
+                    #if MICROPY_COMP_TRIPLE_TUPLE_ASSIGN
+                    if (n_pns0 == 3) {
+                        compile_node(comp, pns1->nodes[2]); // rhs
+                        EMIT(rot_three);
+                    }
+                    #endif
+                    EMIT(rot_two);
+                    c_assign(comp, pns0->nodes[0], ASSIGN_STORE); // lhs store
+                    c_assign(comp, pns0->nodes[1], ASSIGN_STORE); // lhs store
+                    #if MICROPY_COMP_TRIPLE_TUPLE_ASSIGN
+                    if (n_pns0 == 3) {
+                        c_assign(comp, pns0->nodes[2], ASSIGN_STORE); // lhs store
+                    }
+                    #endif
+                    return;
                 }
-                compile_node(comp, pns10->nodes[0]); // rhs
-                compile_node(comp, pns10->nodes[1]); // rhs
-                EMIT(rot_two);
-                c_assign(comp, pns0->nodes[0], ASSIGN_STORE); // lhs store
-                c_assign(comp, pns0->nodes[1], ASSIGN_STORE); // lhs store
-            } else if (MICROPY_COMP_TRIPLE_TUPLE_ASSIGN
-                && MP_PARSE_NODE_IS_STRUCT_KIND(pns->nodes[1], PN_testlist_star_expr)
-                && MP_PARSE_NODE_IS_STRUCT_KIND(pns->nodes[0], PN_testlist_star_expr)
-                && MP_PARSE_NODE_STRUCT_NUM_NODES((mp_parse_node_struct_t*)pns->nodes[1]) == 3
-                && MP_PARSE_NODE_STRUCT_NUM_NODES((mp_parse_node_struct_t*)pns->nodes[0]) == 3) {
-                // optimisation for a, b, c = d, e, f
-                mp_parse_node_struct_t *pns10 = (mp_parse_node_struct_t*)pns->nodes[1];
-                mp_parse_node_struct_t *pns0 = (mp_parse_node_struct_t*)pns->nodes[0];
-                if (MP_PARSE_NODE_IS_STRUCT_KIND(pns0->nodes[0], PN_star_expr)
-                    || MP_PARSE_NODE_IS_STRUCT_KIND(pns0->nodes[1], PN_star_expr)
-                    || MP_PARSE_NODE_IS_STRUCT_KIND(pns0->nodes[2], PN_star_expr)) {
-                    // can't optimise when it's a star expression on the lhs
-                    goto no_optimisation;
-                }
-                compile_node(comp, pns10->nodes[0]); // rhs
-                compile_node(comp, pns10->nodes[1]); // rhs
-                compile_node(comp, pns10->nodes[2]); // rhs
-                EMIT(rot_three);
-                EMIT(rot_two);
-                c_assign(comp, pns0->nodes[0], ASSIGN_STORE); // lhs store
-                c_assign(comp, pns0->nodes[1], ASSIGN_STORE); // lhs store
-                c_assign(comp, pns0->nodes[2], ASSIGN_STORE); // lhs store
-            } else {
-                no_optimisation:
-                compile_node(comp, pns->nodes[1]); // rhs
-                c_assign(comp, pns->nodes[0], ASSIGN_STORE); // lhs store
             }
+            #endif
+
+            compile_node(comp, pns->nodes[1]); // rhs
+            c_assign(comp, pns->nodes[0], ASSIGN_STORE); // lhs store
         }
     } else {
         goto plain_assign;
@@ -3275,7 +3267,7 @@ STATIC void compile_scope_inline_asm(compiler_t *comp, scope_t *scope, pass_kind
 #endif
 
 STATIC void scope_compute_things(scope_t *scope) {
-    // in Micro Python we put the *x parameter after all other parameters (except **y)
+    // in MicroPython we put the *x parameter after all other parameters (except **y)
     if (scope->scope_flags & MP_SCOPE_FLAG_VARARGS) {
         id_info_t *id_param = NULL;
         for (int i = scope->id_info_len - 1; i >= 0; i--) {
@@ -3313,7 +3305,7 @@ STATIC void scope_compute_things(scope_t *scope) {
     // compute the index of cell vars
     for (int i = 0; i < scope->id_info_len; i++) {
         id_info_t *id = &scope->id_info[i];
-        // in Micro Python the cells come right after the fast locals
+        // in MicroPython the cells come right after the fast locals
         // parameters are not counted here, since they remain at the start
         // of the locals, even if they are cell vars
         if (id->kind == ID_INFO_KIND_CELL && !(id->flags & ID_FLAG_IS_PARAM)) {
@@ -3333,14 +3325,14 @@ STATIC void scope_compute_things(scope_t *scope) {
                     id_info_t *id2 = &scope->id_info[j];
                     if (id2->kind == ID_INFO_KIND_FREE && id->qst == id2->qst) {
                         assert(!(id2->flags & ID_FLAG_IS_PARAM)); // free vars should not be params
-                        // in Micro Python the frees come first, before the params
+                        // in MicroPython the frees come first, before the params
                         id2->local_num = num_free;
                         num_free += 1;
                     }
                 }
             }
         }
-        // in Micro Python shift all other locals after the free locals
+        // in MicroPython shift all other locals after the free locals
         if (num_free > 0) {
             for (int i = 0; i < scope->id_info_len; i++) {
                 id_info_t *id = &scope->id_info[i];

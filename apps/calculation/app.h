@@ -4,13 +4,12 @@
 #include "calculation_store.h"
 #include "edit_expression_controller.h"
 #include "history_controller.h"
-#include "local_context.h"
 #include "../shared/text_field_delegate_app.h"
 #include <escher.h>
 
 namespace Calculation {
 
-class App : public Shared::TextFieldDelegateApp {
+class App : public Shared::ExpressionFieldDelegateApp {
 public:
   class Descriptor : public ::App::Descriptor {
   public:
@@ -28,10 +27,12 @@ public:
     void tidy() override;
     CalculationStore m_calculationStore;
   };
-  Poincare::Context * localContext() override;
+  bool textFieldDidReceiveEvent(::TextField * textField, Ion::Events::Event event) override;
+  bool textInputIsCorrect(const char * text);
+  bool expressionLayoutFieldDidReceiveEvent(::ExpressionLayoutField * expressionLayoutField, Ion::Events::Event event) override;
+  const char * XNT() override;
 private:
   App(Container * container, Snapshot * snapshot);
-  LocalContext m_localContext;
   HistoryController m_historyController;
   EditExpressionController m_editExpressionController;
 };

@@ -8,8 +8,10 @@ EvenOddCell::EvenOddCell() :
 }
 
 void EvenOddCell::setEven(bool even) {
-  m_even = even;
-  reloadCell();
+  if (even != m_even) {
+    m_even = even;
+    reloadCell();
+  }
 }
 
 KDColor EvenOddCell::backgroundColor() const {

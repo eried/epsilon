@@ -14,10 +14,20 @@ public:
   bool isEditing();
   void setEditing(bool isEditing);
   void setHighlighted(bool highlight) override;
+  Responder * responder() override {
+    return this;
+  }
+  const char * text() const override {
+    if (!m_textField.isEditing()) {
+      return m_textField.text();
+    }
+    return nullptr;
+  }
   void setAccessoryText(const char * text);
   void setTextColor(KDColor color) override;
   constexpr static int k_bufferLength = TextField::maxBufferSize();
 private:
+  void layoutSubviews() override;
   constexpr static int k_maxNumberOfEditableCharacters = 14;
   TextField m_textField;
   char m_textBody[k_bufferLength];

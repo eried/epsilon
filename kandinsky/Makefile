@@ -25,14 +25,13 @@ FREETYPE_PATH := /usr/local/Cellar/freetype/2.6.3
 # built w/o PNG support and simply won't output an image of the rasterization
 #LIBPNG_PATH := /usr/local/Cellar/libpng/1.6.21
 
-kandinsky/src/text.cpp: kandinsky/src/small_font.h kandinsky/src/large_font.h
-kandinsky/src/context_text.cpp: kandinsky/src/small_font.h kandinsky/src/large_font.h
+generated_headers += $(addprefix kandinsky/src/, small_font.h large_font.h)
 
 small_font_files = $(addprefix kandinsky/src/, small_font.h small_font.c)
 large_font_files = $(addprefix kandinsky/src/, large_font.h large_font.c)
 
-RASTERIZER_CFLAGS := -std=c99 `freetype-config --cflags`
-RASTERIZER_LDFLAGS := `freetype-config --libs`
+RASTERIZER_CFLAGS := -std=c99 `pkg-config freetype2 --cflags`
+RASTERIZER_LDFLAGS := `pkg-config freetype2 --libs`
 
 ifdef LIBPNG_PATH
   small_font_files += kandinsky/src/small_font.png
@@ -46,16 +45,16 @@ endif
 kandinsky/src/small_font.h: kandinsky/src/small_font.c
 kandinsky/src/small_font.c: kandinsky/fonts/rasterizer
 	@echo "RASTER  $(small_font_files)"
-	@$< kandinsky/fonts/SmallSourcePixel.ttf 12 12 SmallFont $(small_font_files)
+	$(Q) $< kandinsky/fonts/SmallSourcePixel.ttf 12 12 SmallFont $(small_font_files)
 
 kandinsky/src/large_font.h: kandinsky/src/large_font.c
 kandinsky/src/large_font.c: kandinsky/fonts/rasterizer
 	@echo "RASTER  $(large_font_files)"
-	@$< kandinsky/fonts/LargeSourcePixel.ttf 16 16 LargeFont $(large_font_files)
+	$(Q) $< kandinsky/fonts/LargeSourcePixel.ttf 16 16 LargeFont $(large_font_files)
 
 kandinsky/fonts/rasterizer: kandinsky/fonts/rasterizer.c kandinsky/fonts/unicode_for_symbol.c
 	@echo "HOSTCC  $@"
-	@$(HOSTCC) $(RASTERIZER_CFLAGS) $^ $(RASTERIZER_LDFLAGS) -o $@
+	$(Q) $(HOSTCC) $(RASTERIZER_CFLAGS) $^ $(RASTERIZER_LDFLAGS) -o $@
 
 products += $(small_font_files) $(large_font_files) kandinsky/fonts/rasterizer
 

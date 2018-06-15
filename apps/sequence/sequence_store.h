@@ -1,8 +1,8 @@
 #ifndef SEQUENCE_SEQUENCE_STORE_H
 #define SEQUENCE_SEQUENCE_STORE_H
 
-#include "sequence.h"
 #include "../shared/function_store.h"
+#include "sequence.h"
 #include <stdint.h>
 #include <escher.h>
 
@@ -12,25 +12,28 @@ class SequenceStore : public Shared::FunctionStore {
 public:
   using Shared::FunctionStore::FunctionStore;
   uint32_t storeChecksum() override;
-  Sequence * functionAtIndex(int i) override;
-  Sequence * activeFunctionAtIndex(int i) override;
-  Sequence * definedFunctionAtIndex(int i) override;
-  Sequence * addEmptyFunction() override;
-  void removeFunction(Shared::Function * f) override;
-  int maxNumberOfFunctions() override;
-  const char * firstAvailableName() override;
+  Sequence * modelAtIndex(int i) override {
+    assert(i>=0 && i<m_numberOfModels);
+    return &m_sequences[i];
+  }
+  Sequence * activeFunctionAtIndex(int i) override { return (Sequence *)Shared::FunctionStore::activeFunctionAtIndex(i); }
+  Sequence * definedFunctionAtIndex(int i) override { return (Sequence *)Shared::FunctionStore::definedFunctionAtIndex(i); }
+  /* WARNING: after calling removeModel or removeAll, the sequence context
+   * need to invalidate its cache as the sequences evaluations might have
+   * changed */
+  int maxNumberOfModels() const override { return MaxNumberOfSequences; }
   char symbol() const override;
-  void removeAll() override;
-  static constexpr int k_maxNumberOfSequences = 2;
-  static constexpr const char * k_sequenceNames[k_maxNumberOfSequences] = {
+  static constexpr const char * k_sequenceNames[MaxNumberOfSequences] = {
     "u", "v"//, "w"
   };
+  const char * firstAvailableName() override {
+    return firstAvailableAttribute(k_sequenceNames, FunctionStore::name);
+  }
 private:
-  const KDColor firstAvailableColor() override;
-  static constexpr KDColor k_defaultColors[k_maxNumberOfSequences] = {
-    Palette::Red, Palette::Blue//, Palette::YellowDark
-  };
-  Sequence m_sequences[k_maxNumberOfSequences];
+  Sequence * emptyModel() override;
+  Sequence * nullModel() override;
+  void setModelAtIndex(Shared::ExpressionModel * f, int i) override;
+  Sequence m_sequences[MaxNumberOfSequences];
 };
 
 }

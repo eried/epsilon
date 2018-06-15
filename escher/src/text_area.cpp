@@ -1,46 +1,142 @@
 #include <escher/text_area.h>
 #include <escher/clipboard.h>
-#include <assert.h>
+#include <escher/text_input_helpers.h>
 
 #include <stddef.h>
 #include <assert.h>
 #include <limits.h>
 
-
 static inline size_t min(size_t a, size_t b) {
   return (a>b ? b : a);
 }
 
-TextArea::Text::Text(char * buffer, size_t bufferSize) :
-  m_buffer(buffer),
-  m_bufferSize(bufferSize)
+/* TextArea */
+
+TextArea::TextArea(Responder * parentResponder, View * contentView, KDText::FontSize fontSize) :
+  TextInput(parentResponder, contentView),
+  m_delegate(nullptr)
 {
-  assert(m_buffer != nullptr);
 }
 
-TextArea::Text::Line::Line(const char * text) :
-  m_text(text),
-  m_length(0)
-{
-  if (m_text != nullptr) {
-    while (*text != 0 && *text != '\n') {
-      text++;
+bool TextArea::handleEventWithText(const char * text, bool indentation, bool forceCursorRightOfText) {
+  int nextCursorLocation = cursorLocation();
+
+  size_t cursorIndexInCommand = TextInputHelpers::CursorIndexInCommand(text);
+
+  size_t eventTextSize = strlen(text) + 1;
+  char buffer[eventTextSize];
+  size_t bufferIndex = 0;
+
+  // Remove EmptyChars
+  for (size_t i = bufferIndex; i < eventTextSize; i++) {
+    if (text[i] != Ion::Charset::Empty) {
+      buffer[bufferIndex++] = text[i];
+    } else if (i < cursorIndexInCommand) {
+      cursorIndexInCommand--;
     }
-    m_length = text-m_text;
   }
+
+  if ((indentation && insertTextWithIndentation(buffer, cursorLocation())) || insertTextAtLocation(buffer, cursorLocation())) {
+    if (forceCursorRightOfText) {
+      nextCursorLocation += strlen(buffer);
+    } else {
+      nextCursorLocation += cursorIndexInCommand;
+    }
+  }
+  setCursorLocation(nextCursorLocation);
+  return true;
 }
 
-bool TextArea::Text::Line::contains(const char * c) const {
-  return (c >= m_text) && (c < m_text + m_length);
+bool TextArea::handleEvent(Ion::Events::Event event) {
+  if (m_delegate != nullptr && m_delegate->textAreaDidReceiveEvent(this, event)) {
+    return true;
+  } else if (Responder::handleEvent(event)) {
+    // The only event Responder handles is 'Toolbox' displaying.
+    return true;
+  } else if (event == Ion::Events::Left) {
+    return setCursorLocation(cursorLocation()-1);
+  } else if (event == Ion::Events::Right) {
+    return setCursorLocation(cursorLocation()+1);
+  } else if (event == Ion::Events::Up) {
+    contentView()->moveCursorGeo(0, -1);
+  } else if (event == Ion::Events::Down) {
+    contentView()->moveCursorGeo(0, 1);
+  } else if (event == Ion::Events::ShiftLeft) {
+    contentView()->moveCursorGeo(-INT_MAX/2, 0);
+  } else if (event == Ion::Events::ShiftRight) {
+    contentView()->moveCursorGeo(INT_MAX/2, 0);
+  } else if (event == Ion::Events::Backspace) {
+    return removeChar();
+  } else if (event.hasText()) {
+    return handleEventWithText(event.text());
+  } else if (event == Ion::Events::EXE) {
+    return handleEventWithText("\n");
+  } else if (event == Ion::Events::Clear) {
+    if (!contentView()->removeEndOfLine()) {
+      contentView()->removeStartOfLine();
+    }
+  } else if (event == Ion::Events::Paste) {
+    return handleEventWithText(Clipboard::sharedClipboard()->storedText());
+  } else {
+    return false;
+  }
+  scrollToCursor();
+  return true;
 }
 
-TextArea::Text::LineIterator & TextArea::Text::LineIterator::operator++() {
-  const char * last = m_line.text() + m_line.length();
-  m_line = Line(*last == 0 ? nullptr : last+1);
-  return *this;
+void TextArea::setText(char * textBuffer, size_t textBufferSize) {
+  contentView()->setText(textBuffer, textBufferSize);
+  contentView()->moveCursorGeo(0, 0);
 }
+
+bool TextArea::insertTextWithIndentation(const char * textBuffer, int location) {
+  int indentation = indentationBeforeCursor();
+  char spaceString[indentation+1];
+  for (int i = 0; i < indentation; i++) {
+    spaceString[i] = ' ';
+  }
+  spaceString[indentation] = 0;
+  int spaceStringSize = strlen(spaceString);
+  int textSize = strlen(textBuffer);
+  int totalIndentationSize = 0;
+  for (size_t i = 0; i < strlen(textBuffer); i++) {
+    if (textBuffer[i] == '\n') {
+      totalIndentationSize+=spaceStringSize;
+    }
+  }
+  if (contentView()->getText()->textLength() + textSize + totalIndentationSize >= contentView()->getText()->bufferSize() || textSize == 0) {
+    return false;
+  }
+  int currentLocation = location;
+  for (size_t i = 0; i < strlen(textBuffer); i++) {
+    const char charString[] = {textBuffer[i], 0};
+    insertTextAtLocation(charString, currentLocation++);
+    if (textBuffer[i] == '\n') {
+      insertTextAtLocation(spaceString, currentLocation);
+      currentLocation += strlen(spaceString);
+    }
+  }
+  return true;
+}
+
+int TextArea::indentationBeforeCursor() const {
+  int charIndex = cursorLocation()-1;
+  int indentationSize = 0;
+  while (charIndex >= 0 && nonEditableContentView()->text()[charIndex] != '\n') {
+    if (nonEditableContentView()->text()[charIndex] == ' ') {
+      indentationSize++;
+    } else {
+      indentationSize = 0;
+    }
+    charIndex--;
+  }
+  return indentationSize;
+}
+
+/* TextArea::Text */
 
 size_t TextArea::Text::indexAtPosition(Position p) {
+  assert(m_buffer != nullptr);
   if (p.line() < 0) {
     return 0;
   }
@@ -59,7 +155,8 @@ size_t TextArea::Text::indexAtPosition(Position p) {
   return endOfLastLine - m_buffer;
 }
 
-TextArea::Text::Position TextArea::Text::positionAtIndex(size_t index) {
+TextArea::Text::Position TextArea::Text::positionAtIndex(size_t index) const {
+  assert(m_buffer != nullptr);
   assert(index < m_bufferSize);
   const char * target = m_buffer + index;
   size_t y = 0;
@@ -75,6 +172,7 @@ TextArea::Text::Position TextArea::Text::positionAtIndex(size_t index) {
 }
 
 void TextArea::Text::insertChar(char c, size_t index) {
+  assert(m_buffer != nullptr);
   assert(index < m_bufferSize-1);
   char previous = c;
   for (size_t i=index; i<m_bufferSize; i++) {
@@ -88,6 +186,7 @@ void TextArea::Text::insertChar(char c, size_t index) {
 }
 
 char TextArea::Text::removeChar(size_t index) {
+  assert(m_buffer != nullptr);
   assert(index < m_bufferSize-1);
   char deletedChar = m_buffer[index];
   for (size_t i=index; i<m_bufferSize; i++) {
@@ -99,13 +198,14 @@ char TextArea::Text::removeChar(size_t index) {
   return deletedChar;
 }
 
-int TextArea::Text::removeRemainingLine(size_t index, int direction) {
-  assert(index >= 0 && index < m_bufferSize);
+size_t TextArea::Text::removeRemainingLine(size_t index, int direction) {
+  assert(m_buffer != nullptr);
+  assert(index < m_bufferSize);
   int jump = index;
   while (m_buffer[jump] != '\n' && m_buffer[jump] != 0 && jump >= 0) {
     jump += direction;
   }
-  int delta = direction > 0 ? jump - index : index - jump;
+  size_t delta = direction > 0 ? jump - index : index - jump;
   if (delta == 0) {
     return 0;
   }
@@ -126,7 +226,36 @@ int TextArea::Text::removeRemainingLine(size_t index, int direction) {
   return 0;
 }
 
+/* TextArea::Text::Line */
+
+TextArea::Text::Line::Line(const char * text) :
+  m_text(text),
+  m_length(0)
+{
+  if (m_text != nullptr) {
+    while (*text != 0 && *text != '\n') {
+      text++;
+    }
+    m_length = text-m_text;
+  }
+}
+
+bool TextArea::Text::Line::contains(const char * c) const {
+  return (c >= m_text) && (c < m_text + m_length);
+}
+
+/* TextArea::Text::LineIterator */
+
+TextArea::Text::LineIterator & TextArea::Text::LineIterator::operator++() {
+  const char * last = m_line.text() + m_line.length();
+  m_line = Line(*last == 0 ? nullptr : last+1);
+  return *this;
+}
+
+/* TextArea::Text::Position */
+
 TextArea::Text::Position TextArea::Text::span() const {
+  assert(m_buffer != nullptr);
   size_t width = 0;
   size_t height = 0;
   for (Line l : *this) {
@@ -140,30 +269,9 @@ TextArea::Text::Position TextArea::Text::span() const {
 
 /* TextArea::ContentView */
 
-TextArea::ContentView::ContentView(char * textBuffer, size_t textBufferSize, KDText::FontSize fontSize, KDColor textColor, KDColor backgroundColor) :
-  View(),
-  m_cursorIndex(0),
-  m_text(textBuffer, textBufferSize),
-  m_fontSize(fontSize),
-  m_textColor(textColor),
-  m_backgroundColor(backgroundColor)
-{
-}
-
-KDSize TextArea::ContentView::minimalSizeForOptimalDisplay() const {
-  KDSize charSize = KDText::charSize(m_fontSize);
-  Text::Position span = m_text.span();
-  return KDSize(
-    /* We take into account the space required to draw a cursor at the end of
-     * line by adding charSize.width() to the width. */
-    charSize.width() * (span.column()+1),
-    charSize.height() * span.line()
-  );
-}
-
-
 void TextArea::ContentView::drawRect(KDContext * ctx, KDRect rect) const {
-  ctx->fillRect(rect, m_backgroundColor);
+  // TODO: We're clearing areas we'll draw text over. It's not needed.
+  clearRect(ctx, rect);
 
   KDSize charSize = KDText::charSize(m_fontSize);
 
@@ -179,86 +287,95 @@ void TextArea::ContentView::drawRect(KDContext * ctx, KDRect rect) const {
   );
 
   int y = 0;
-  size_t x = topLeft.column();
 
   for (Text::Line line : m_text) {
     if (y >= topLeft.line() && y <= bottomRight.line() && topLeft.column() < (int)line.length()) {
-      //drawString(line.text(), 0, y*charHeight); // Naive version
-      ctx->drawString(
-        line.text() + topLeft.column(),
-        KDPoint(x*charSize.width(), y*charSize.height()),
-        m_fontSize,
-        m_textColor,
-        m_backgroundColor,
-        min(line.length() - topLeft.column(), bottomRight.column() - topLeft.column())
-      );
+      drawLine(ctx, y, line.text(), line.length(), topLeft.column(), bottomRight.column());
     }
     y++;
   }
 }
 
-int TextArea::ContentView::numberOfSubviews() const {
-  return 1;
+void TextArea::ContentView::drawStringAt(KDContext * ctx, int line, int column, const char * text, size_t length, KDColor textColor, KDColor backgroundColor) const {
+  KDSize charSize = KDText::charSize(m_fontSize);
+  ctx->drawString(
+    text,
+    KDPoint(column*charSize.width(), line*charSize.height()),
+    m_fontSize,
+    textColor,
+    backgroundColor,
+    length
+  );
 }
 
-View * TextArea::ContentView::subviewAtIndex(int index) {
-  return &m_cursorView;
+KDSize TextArea::ContentView::minimalSizeForOptimalDisplay() const {
+  KDSize charSize = KDText::charSize(m_fontSize);
+  Text::Position span = m_text.span();
+  return KDSize(
+    /* We take into account the space required to draw a cursor at the end of
+     * line by adding charSize.width() to the width. */
+    charSize.width() * (span.column()+1),
+    charSize.height() * span.line()
+  );
 }
 
-void TextArea::ContentView::layoutSubviews() {
-  m_cursorView.setFrame(cursorRect());
+void TextArea::TextArea::ContentView::setText(char * textBuffer, size_t textBufferSize) {
+  m_text.setText(textBuffer, textBufferSize);
+  m_cursorIndex = 0;
 }
 
-void TextArea::TextArea::ContentView::insertText(const char * text) {
+bool TextArea::TextArea::ContentView::insertTextAtLocation(const char * text, int location) {
   int textSize = strlen(text);
   if (m_text.textLength() + textSize >= m_text.bufferSize() || textSize == 0) {
-    return;
+    return false;
   }
   bool lineBreak = false;
+  int currentLocation = location;
   while (*text != 0) {
     lineBreak |= *text == '\n';
-    m_text.insertChar(*text++, m_cursorIndex++);
+    m_text.insertChar(*text++, currentLocation++);
   }
-  layoutSubviews(); // Reposition the cursor
-  markRectAsDirty(dirtyRectFromCursorPosition(m_cursorIndex-1, lineBreak));
+  reloadRectFromCursorPosition(currentLocation-1, lineBreak);
+  return true;
 }
 
-void TextArea::TextArea::ContentView::removeChar() {
-  bool lineBreak = false;
-  if (m_cursorIndex > 0) {
-    lineBreak = m_text.removeChar(--m_cursorIndex) == '\n';
+bool TextArea::TextArea::ContentView::removeChar() {
+  if (cursorLocation() <= 0) {
+    return false;
   }
+  bool lineBreak = false;
+  assert(m_cursorIndex > 0);
+  lineBreak = m_text.removeChar(--m_cursorIndex) == '\n';
   layoutSubviews(); // Reposition the cursor
-  markRectAsDirty(dirtyRectFromCursorPosition(m_cursorIndex, lineBreak));
+  reloadRectFromCursorPosition(cursorLocation(), lineBreak);
+  return true;
 }
 
 bool TextArea::ContentView::removeEndOfLine() {
-  int removedLine = m_text.removeRemainingLine(m_cursorIndex, 1);
+  size_t removedLine = m_text.removeRemainingLine(cursorLocation(), 1);
   if (removedLine > 0) {
     layoutSubviews();
-    markRectAsDirty(dirtyRectFromCursorPosition(m_cursorIndex, false));
+    reloadRectFromCursorPosition(cursorLocation(), false);
     return true;
   }
   return false;
 }
 
-void TextArea::ContentView::removeStartOfLine() {
-  if (m_cursorIndex <= 0) {
-    return;
+bool TextArea::ContentView::removeStartOfLine() {
+  if (cursorLocation() <= 0) {
+    return false;
   }
-  int removedLine = m_text.removeRemainingLine(m_cursorIndex-1, -1);
+  size_t removedLine = m_text.removeRemainingLine(cursorLocation()-1, -1);
   if (removedLine > 0) {
-    m_cursorIndex -= removedLine;
-    layoutSubviews();
-    markRectAsDirty(dirtyRectFromCursorPosition(m_cursorIndex, false));
+    assert(m_cursorIndex >= removedLine);
+    setCursorLocation(cursorLocation()-removedLine);
+    reloadRectFromCursorPosition(cursorLocation(), false);
+    return true;
   }
+  return false;
 }
 
-KDRect TextArea::TextArea::ContentView::cursorRect() {
-  return characterFrameAtIndex(m_cursorIndex);
-}
-
-KDRect TextArea::TextArea::ContentView::characterFrameAtIndex(size_t index) {
+KDRect TextArea::ContentView::characterFrameAtIndex(size_t index) const {
   KDSize charSize = KDText::charSize(m_fontSize);
   Text::Position p = m_text.positionAtIndex(index);
   return KDRect(
@@ -269,78 +386,7 @@ KDRect TextArea::TextArea::ContentView::characterFrameAtIndex(size_t index) {
   );
 }
 
-void TextArea::TextArea::ContentView::moveCursorGeo(int deltaX, int deltaY) {
+void TextArea::ContentView::moveCursorGeo(int deltaX, int deltaY) {
   Text::Position p = m_text.positionAtIndex(m_cursorIndex);
-  m_cursorIndex = m_text.indexAtPosition(Text::Position(p.column() + deltaX, p.line() + deltaY));
-  layoutSubviews();
-}
-
-void TextArea::TextArea::ContentView::moveCursorIndex(int deltaX) {
-  assert(deltaX == -1 || deltaX == 1);
-  if (deltaX == -1 && m_cursorIndex>0) {
-    m_cursorIndex--;
-  }
-  if (deltaX == 1 && m_text[m_cursorIndex] != 0) {
-    m_cursorIndex++;
-  }
-  layoutSubviews();
-}
-
-KDRect TextArea::TextArea::ContentView::dirtyRectFromCursorPosition(size_t index, bool lineBreak) {
-  KDRect charRect = characterFrameAtIndex(index);
-  KDRect dirtyRect = KDRect(charRect.x(), charRect.y(), bounds().width() - charRect.x(), charRect.height());
-  if (lineBreak) {
-      dirtyRect = dirtyRect.unionedWith(KDRect(0, charRect.bottom()+1, bounds().width(), bounds().height()-charRect.bottom()-1));
-  }
-  return dirtyRect;
-}
-
-/* TextArea */
-
-TextArea::TextArea(Responder * parentResponder, char * textBuffer,
-    size_t textBufferSize, TextAreaDelegate * delegate,
-    KDText::FontSize fontSize, KDColor textColor, KDColor backgroundColor) :
-  ScrollableView(parentResponder, &m_contentView, this),
-  m_contentView(textBuffer, textBufferSize, fontSize, textColor, backgroundColor),
-  m_delegate(delegate)
-{
-  assert(textBufferSize < INT_MAX/2);
-}
-
-bool TextArea::TextArea::handleEvent(Ion::Events::Event event) {
-  if (event == Ion::Events::Left) {
-    m_contentView.moveCursorIndex(-1);
-  } else if (event == Ion::Events::Right) {
-    m_contentView.moveCursorIndex(1);
-  } else if (event == Ion::Events::Up) {
-    m_contentView.moveCursorGeo(0, -1);
-  } else if (event == Ion::Events::Down) {
-    m_contentView.moveCursorGeo(0, 1);
-  } else if (event == Ion::Events::Origin) {
-     m_contentView.moveCursorGeo(-INT_MAX/2, 0);
-  } else if (event == Ion::Events::End) {
-     m_contentView.moveCursorGeo(INT_MAX/2, 0);
-  } else if (event == Ion::Events::Backspace) {
-    m_contentView.removeChar();
-  } else if (event.hasText()) {
-    m_contentView.insertText(event.text());
-  } else if (event == Ion::Events::EXE) {
-    m_contentView.insertText("\n");
-  } else if (event == Ion::Events::Clear) {
-    if (!m_contentView.removeEndOfLine()) {
-      m_contentView.removeStartOfLine();
-    }
-  } else
-  {
-    return false;
-  }
-  /* Technically, we do not need to overscroll in text area. However,
-   * logically, we should layout the scroll view before calling
-   * scrollToContentRect in case the size of the scroll view has changed and
-   * then call scrollToContentRect which call another layout of the scroll view
-   * if the offset has evolved. In order to avoid requiring two layouts, we
-   * allow overscrolling in scrollToContentRect and the last layout of the
-   * scroll view corrects the size of the scroll view only once. */
-  scrollToContentRect(m_contentView.cursorRect(), true);
-  return true;
+  setCursorLocation(m_text.indexAtPosition(Text::Position(p.column() + deltaX, p.line() + deltaY)));
 }

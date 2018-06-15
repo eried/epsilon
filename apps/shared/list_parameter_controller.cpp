@@ -3,11 +3,11 @@
 
 namespace Shared {
 
-ListParameterController::ListParameterController(Responder * parentResponder, FunctionStore * functionStore, I18n::Message functionColorMessage, I18n::Message deleteFunctionMessage) :
+ListParameterController::ListParameterController(Responder * parentResponder, FunctionStore * functionStore, I18n::Message functionColorMessage, I18n::Message deleteFunctionMessage, SelectableTableViewDelegate * tableDelegate) :
   ViewController(parentResponder),
-  m_selectableTableView(this, this, 0, 1, Metric::CommonTopMargin, Metric::CommonRightMargin,
-    Metric::CommonBottomMargin, Metric::CommonLeftMargin, this),
+  m_selectableTableView(this, this, this, tableDelegate),
   m_functionStore(functionStore),
+  m_function(nullptr),
 #if FUNCTION_COLOR_CHOICE
   m_colorCell(functionColorMessage),
 #endif
@@ -25,13 +25,17 @@ View * ListParameterController::view() {
 }
 
 void ListParameterController::didBecomeFirstResponder() {
-  m_selectableTableView.reloadData();
+  app()->setFirstResponder(&m_selectableTableView);
+}
+
+void ListParameterController::viewWillAppear() {
+  ViewController::viewWillAppear();
   if (selectedRow() == -1) {
     selectCellAtLocation(0, 0);
   } else {
     selectCellAtLocation(selectedColumn(), selectedRow());
   }
-  app()->setFirstResponder(&m_selectableTableView);
+  m_selectableTableView.reloadData();
 }
 
 void ListParameterController::willDisplayCellForIndex(HighlightCell * cell, int index) {
@@ -95,13 +99,13 @@ bool ListParameterController::handleEnterOnRow(int rowIndex) {
       case 1:
 #endif
     {
-      if (m_functionStore->numberOfFunctions() > 1) {
-        m_functionStore->removeFunction(m_function);
+      if (m_functionStore->numberOfModels() > 1) {
+        m_functionStore->removeModel(m_function);
         StackViewController * stack = (StackViewController *)(parentResponder());
         stack->pop();
         return true;
       } else {
-        if (m_functionStore->numberOfDefinedFunctions() == 1) {
+        if (m_functionStore->numberOfDefinedModels() == 1) {
           Function * f = m_functionStore->definedFunctionAtIndex(0);
           f->setContent("");
           StackViewController * stack = (StackViewController *)(parentResponder());

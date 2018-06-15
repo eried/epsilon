@@ -1,6 +1,6 @@
 #include "text_field_delegate_app.h"
 #include "../apps_container.h"
-#include <math.h>
+#include <cmath>
 #include <string.h>
 
 using namespace Poincare;
@@ -77,13 +77,12 @@ bool TextFieldDelegateApp::textFieldShouldFinishEditing(TextField * textField, I
 }
 
 bool TextFieldDelegateApp::textFieldDidReceiveEvent(TextField * textField, Ion::Events::Event event) {
-  if (textField->textFieldShouldFinishEditing(event) && textField->isEditing()) {
+  if (textField->isEditing() && textField->textFieldShouldFinishEditing(event)) {
     Expression * exp = Expression::parse(textField->text());
-    bool invalidText = (exp == nullptr || !exp->hasValidNumberOfArguments());
     if (exp != nullptr) {
       delete exp;
     }
-    if (invalidText) {
+    if (exp == nullptr) {
       textField->app()->displayWarning(I18n::Message::SyntaxError);
       return true;
     }
@@ -94,7 +93,7 @@ bool TextFieldDelegateApp::textFieldDidReceiveEvent(TextField * textField, Ion::
     }
     AppsContainer * appsContainer = (AppsContainer *)textField->app()->container();
     VariableBoxController * variableBoxController = appsContainer->variableBoxController();
-    variableBoxController->setTextFieldCaller(textField);
+    variableBoxController->setSender(textField);
     textField->app()->displayModalViewController(variableBoxController, 0.f, 0.f, Metric::PopUpTopMargin, Metric::PopUpLeftMargin, 0, Metric::PopUpRightMargin);
     return true;
   }
@@ -103,15 +102,15 @@ bool TextFieldDelegateApp::textFieldDidReceiveEvent(TextField * textField, Ion::
       textField->setEditing(true);
     }
     const char * xnt = privateXNT(textField);
-    textField->insertTextAtLocation(xnt, textField->cursorLocation());
-    textField->setCursorLocation(textField->cursorLocation()+strlen(xnt));
-    return true;
+    return textField->handleEventWithText(xnt);
   }
   return false;
 }
 
-Toolbox * TextFieldDelegateApp::toolboxForTextField(TextField * textField) {
-  return container()->mathToolbox();
+Toolbox * TextFieldDelegateApp::toolboxForTextInput(TextInput * textInput) {
+  Toolbox * toolbox = container()->mathToolbox();
+  toolbox->setSender(textInput);
+  return toolbox;
 }
 
 }

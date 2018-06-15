@@ -3,6 +3,8 @@
 #include "../apps_container.h"
 #include <assert.h>
 
+using namespace Shared;
+
 namespace Calculation {
 
 HistoryController::HistoryController(Responder * parentResponder, CalculationStore * calculationStore) :
@@ -47,7 +49,12 @@ bool HistoryController::handleEvent(Ion::Events::Event event) {
     if (subviewType == HistoryViewCell::SubviewType::Input) {
       editController->insertTextBody(calculation->inputText());
     } else {
-      editController->insertTextBody(calculation->outputText());
+      ScrollableExactApproximateExpressionsView::SubviewType outputSubviewType = selectedCell->outputView()->selectedSubviewType();
+      if (outputSubviewType == ScrollableExactApproximateExpressionsView::SubviewType::ExactOutput) {
+        editController->insertTextBody(calculation->exactOutputText());
+      } else {
+        editController->insertTextBody(calculation->approximateOutputText());
+      }
     }
     return true;
   }
@@ -89,18 +96,6 @@ bool HistoryController::handleEvent(Ion::Events::Event event) {
     app()->setFirstResponder(editController);
     return true;
   }
-  if (event == Ion::Events::Copy) {
-    HistoryViewCell * selectedCell = (HistoryViewCell *)selectableTableView()->selectedCell();
-    HistoryViewCell::SubviewType subviewType = selectedCell->selectedSubviewType();
-    int focusRow = selectedRow();
-    Calculation * calculation = m_calculationStore->calculationAtIndex(focusRow);
-    if (subviewType == HistoryViewCell::SubviewType::Input) {
-      Clipboard::sharedClipboard()->store(calculation->inputText());
-    } else {
-      Clipboard::sharedClipboard()->store(calculation->outputText());
-    }
-    return true;
-  }
   return false;
 }
 
@@ -109,14 +104,12 @@ void HistoryController::tableViewDidChangeSelection(SelectableTableView * t, int
   if (selectedCell == nullptr) {
     return;
   }
-  if (selectedRow() < previousSelectedCellY) {
-    selectedCell->setSelectedSubviewType(HistoryViewCell::SubviewType::Output);
-  }
-  if (selectedRow() >= previousSelectedCellY) {
-    selectedCell->setSelectedSubviewType(HistoryViewCell::SubviewType::Input);
-  }
   if (previousSelectedCellY == -1) {
     selectedCell->setSelectedSubviewType(HistoryViewCell::SubviewType::Output);
+  } else if (selectedRow() < previousSelectedCellY) {
+    selectedCell->setSelectedSubviewType(HistoryViewCell::SubviewType::Output);
+  } else if (selectedRow() > previousSelectedCellY) {
+    selectedCell->setSelectedSubviewType(HistoryViewCell::SubviewType::Input);
   }
   app()->setFirstResponder(selectedCell);
   selectedCell->reloadCell();
@@ -142,6 +135,7 @@ void HistoryController::willDisplayCellForIndex(HighlightCell * cell, int index)
   HistoryViewCell * myCell = (HistoryViewCell *)cell;
   myCell->setCalculation(m_calculationStore->calculationAtIndex(index));
   myCell->setEven(index%2 == 0);
+  myCell->reloadCell();
 }
 
 KDCoordinate HistoryController::rowHeight(int j) {
@@ -149,27 +143,8 @@ KDCoordinate HistoryController::rowHeight(int j) {
     return 0;
   }
   Calculation * calculation = m_calculationStore->calculationAtIndex(j);
-  KDCoordinate inputHeight = calculation->inputLayout()->size().height();
   App * calculationApp = (App *)app();
-  KDCoordinate outputHeight = calculation->outputLayout(calculationApp->localContext())->size().height();
-  return inputHeight + outputHeight + 3*HistoryViewCell::k_digitVerticalMargin;
-}
-
-KDCoordinate HistoryController::cumulatedHeightFromIndex(int j) {
-  int result = 0;
-  for (int k = 0; k < j; k++) {
-    result += rowHeight(k);
-  }
-  return result;
-}
-
-int HistoryController::indexFromCumulatedHeight(KDCoordinate offsetY) {
-  int result = 0;
-  int j = 0;
-  while (result < offsetY && j < numberOfRows()) {
-    result += rowHeight(j++);
-  }
-  return (result < offsetY || offsetY == 0) ? j : j - 1;
+  return calculation->height(calculationApp->localContext()) + 3*HistoryViewCell::k_digitVerticalMargin;
 }
 
 int HistoryController::typeAtLocation(int i, int j) {

@@ -9,7 +9,8 @@ public:
   ExpressionTableCell(Layout layout = Layout::Horizontal);
   View * labelView() const override;
   void setHighlighted(bool highlight) override;
-  void setExpression(Poincare::ExpressionLayout * expressionLayout);
+  void setExpressionLayout(Poincare::ExpressionLayout * expressionLayout);
+  Poincare::ExpressionLayout * expressionLayout() const override { return m_labelExpressionView.expressionLayout(); }
 private:
   ExpressionView m_labelExpressionView;
 };

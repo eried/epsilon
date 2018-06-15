@@ -37,7 +37,7 @@ void ValuesController::willDisplayCellAtLocation(HighlightCell * cell, int i, in
   }
   // The cell is a function title cell:
   if (j == 0 && i > 0) {
-    FunctionTitleCell * myFunctionCell = (FunctionTitleCell *)cell;
+    Shared::BufferFunctionTitleCell * myFunctionCell = (Shared::BufferFunctionTitleCell *)cell;
     CartesianFunction * function = functionAtColumn(i);
     char bufferName[6] = {0, 0, '(', 'x', ')', 0};
     const char * name = nullptr;
@@ -55,7 +55,7 @@ void ValuesController::willDisplayCellAtLocation(HighlightCell * cell, int i, in
 }
 
 I18n::Message ValuesController::emptyMessage() {
-  if (m_functionStore->numberOfDefinedFunctions() == 0) {
+  if (m_functionStore->numberOfDefinedModels() == 0) {
     return I18n::Message::NoFunction;
   }
   return I18n::Message::NoActivatedFunction;
@@ -68,7 +68,7 @@ IntervalParameterController * ValuesController::intervalParameterController() {
 CartesianFunction * ValuesController::functionAtColumn(int i) {
   assert(i > 0);
   int index = 1;
-  for (int k = 0; k < m_functionStore->numberOfDefinedFunctions(); k++) {
+  for (int k = 0; k < m_functionStore->numberOfDefinedModels(); k++) {
     if (m_functionStore->definedFunctionAtIndex(k)->isActive()) {
       if (i == index) {
         return m_functionStore->definedFunctionAtIndex(k);
@@ -89,7 +89,7 @@ CartesianFunction * ValuesController::functionAtColumn(int i) {
 bool ValuesController::isDerivativeColumn(int i) {
   assert(i >= 1);
   int index = 1;
-  for (int k = 0; k < m_functionStore->numberOfDefinedFunctions(); k++) {
+  for (int k = 0; k < m_functionStore->numberOfDefinedModels(); k++) {
     if (m_functionStore->definedFunctionAtIndex(k)->isActive()) {
       if (i == index) {
         return false;
@@ -122,7 +122,7 @@ int ValuesController::maxNumberOfFunctions() {
   return k_maxNumberOfFunctions;
 }
 
-FunctionTitleCell * ValuesController::functionTitleCells(int j) {
+Shared::BufferFunctionTitleCell * ValuesController::functionTitleCells(int j) {
   assert(j >= 0 && j < k_maxNumberOfFunctions);
   return m_functionTitleCells[j];
 }
@@ -151,7 +151,7 @@ double ValuesController::evaluationOfAbscissaAtColumn(double abscissa, int colum
 
 View * ValuesController::loadView() {
   for (int i = 0; i < k_maxNumberOfFunctions; i++) {
-    m_functionTitleCells[i] = new FunctionTitleCell(FunctionTitleCell::Orientation::HorizontalIndicator, KDText::FontSize::Small);
+    m_functionTitleCells[i] = new Shared::BufferFunctionTitleCell(FunctionTitleCell::Orientation::HorizontalIndicator, KDText::FontSize::Small);
   }
   for (int i = 0; i < k_maxNumberOfCells; i++) {
     m_floatCells[i] = new EvenOddBufferTextCell();

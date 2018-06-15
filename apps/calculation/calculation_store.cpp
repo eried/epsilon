@@ -11,7 +11,7 @@ CalculationStore::CalculationStore() :
 
 Calculation * CalculationStore::push(const char * text, Context * context) {
   Calculation * result = &m_calculations[m_startIndex];
-  result->setContent(text, context);
+  result->setContent(text, context, ansExpression(context));
   m_startIndex++;
   if (m_startIndex >= k_maxNumberOfCalculations) {
     m_startIndex = 0;
@@ -87,6 +87,26 @@ void CalculationStore::tidy() {
   for (int i = 0; i < k_maxNumberOfCalculations; i++) {
     m_calculations[i].tidy();
   }
+}
+
+Expression * CalculationStore::ansExpression(Context * context) {
+  if (numberOfCalculations() == 0) {
+    static Rational defaultExpression(0);
+    return &defaultExpression;
+  }
+  Calculation * lastCalculation = calculationAtIndex(numberOfCalculations()-1);
+  /* Special case: the exact output is a Store/Equal expression.
+   * Store/Equal expression must be final root of an expression.
+   * To avoid turning 'ans->A' in '2->A->A' (or 2->A=A) which cannot be parsed),
+   * ans is replaced by the approximation output in when any Store or Equal
+   * expression appears.*/
+  bool exactOuptutInvolvesStoreEqual = lastCalculation->exactOutput(context)->recursivelyMatches([](const Expression * e, Context & context) {
+          return e->type() == Expression::Type::Store || e->type() == Expression::Type::Equal;
+        }, *context);
+  if (lastCalculation->input()->isApproximate(*context) || exactOuptutInvolvesStoreEqual) {
+    return lastCalculation->approximateOutput(context);
+  }
+  return lastCalculation->exactOutput(context);
 }
 
 }

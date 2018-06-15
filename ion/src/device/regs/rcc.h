@@ -7,8 +7,11 @@ class RCC {
 public:
   class CR : public Register32 {
   public:
-    REGS_BOOL_FIELD(PLLRDY, 25);
+    REGS_BOOL_FIELD(HSION, 0);
+    REGS_BOOL_FIELD(HSEON, 16);
+    REGS_BOOL_FIELD(HSERDY, 17);
     REGS_BOOL_FIELD(PLLON, 24);
+    REGS_BOOL_FIELD(PLLRDY, 25);
   };
 
   class PLLCFGR : public Register32 {
@@ -34,14 +37,26 @@ public:
     };
     void setSW(SW s) volatile { setBitRange(1, 0, (uint8_t)s); }
     SW getSWS() volatile { return (SW)getBitRange(3,2); }
-    enum class AHBRatio {
-      One = 0,
-      DivideBy2 = 4,
-      DivideBy4 = 5,
-      DivideBy8 = 6,
-      DivideBy16 = 7
+    enum class AHBPrescaler {
+      SysClk = 0,
+      SysClkDividedBy2 = 8,
+      SysClkDividedBy4 = 9,
+      SysClkDividedBy8 = 10,
+      SysClkDividedBy16 = 11,
+      SysClkDividedBy64 = 12,
+      SysClkDividedBy128 = 13,
+      SysClkDividedBy256 = 14,
+      SysClkDividedBy512 = 15
     };
-    void setPPRE1(AHBRatio r) volatile { setBitRange(12, 10, (uint32_t)r); }
+    void setHPRE(AHBPrescaler p) volatile { setBitRange(7, 4, (uint32_t)p); }
+    enum class APBPrescaler{
+      AHB = 0,
+      AHBDividedBy2 = 4,
+      AHBDividedBy4 = 5,
+      AHBDividedBy8 = 6,
+      AHBDividedBy16 = 7
+    };
+    void setPPRE1(APBPrescaler p) volatile { setBitRange(12, 10, (uint32_t)p); }
   };
 
   class AHB1ENR : public Register32 {
@@ -63,12 +78,13 @@ public:
   class AHB2ENR : Register32 {
   public:
     REGS_BOOL_FIELD(RNGEN, 6);
+    REGS_BOOL_FIELD(OTGFSEN, 7);
   };
 
   class AHB3ENR : Register32 {
   public:
     REGS_BOOL_FIELD(FSMCEN, 0);
-    REGS_BOOL_FIELD(QSPIEN, 0);
+    REGS_BOOL_FIELD(QSPIEN, 1);
   };
 
   class APB1ENR : public Register32 {
@@ -87,6 +103,7 @@ public:
     REGS_BOOL_FIELD(USART1EN, 4);
     REGS_BOOL_FIELD(ADC1EN, 8);
     REGS_BOOL_FIELD(SDIOEN, 11);
+    REGS_BOOL_FIELD(SPI1EN, 12);
     REGS_BOOL_FIELD(SYSCFGEN, 14);
   };
 

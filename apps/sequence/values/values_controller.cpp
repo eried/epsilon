@@ -30,13 +30,13 @@ void ValuesController::willDisplayCellAtLocation(HighlightCell * cell, int i, in
   if (j == 0 && i > 0) {
     SequenceTitleCell * myCell = (SequenceTitleCell *)cell;
     Sequence * sequence = m_sequenceStore->activeFunctionAtIndex(i-1);
-    myCell->setExpression(sequence->nameLayout());
+    myCell->setExpressionLayout(sequence->nameLayout());
     myCell->setColor(sequence->color());
   }
 }
 
 I18n::Message ValuesController::emptyMessage() {
-  if (m_sequenceStore->numberOfDefinedFunctions() == 0) {
+  if (m_sequenceStore->numberOfDefinedModels() == 0) {
     return I18n::Message::NoSequence;
   }
   return I18n::Message::NoActivatedSequence;

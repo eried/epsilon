@@ -10,6 +10,7 @@ class Responder {
 public:
   Responder(Responder * parentResponder);
   virtual bool handleEvent(Ion::Events::Event event); // Default implementation does nothing
+  virtual bool handleEventWithText(const char * text, bool indentation = false, bool forceCursorRightOfText = false) { return false; }
   virtual void didBecomeFirstResponder();
   virtual void willResignFirstResponder();
   virtual void didEnterResponderChain(Responder * previousFirstResponder);
@@ -18,7 +19,7 @@ public:
   Responder * commonAncestorWith(Responder * responder);
   void setParentResponder(Responder * responder);
   App * app();
-  virtual Toolbox * toolbox();
+  virtual Toolbox * toolbox() { return nullptr; }
 private:
   Responder * m_parentResponder;
 };

@@ -57,12 +57,11 @@ void App::Snapshot::tidy() {
 
 App::App(Container * container, Snapshot * snapshot) :
   FunctionApp(container, snapshot, &m_inputViewController),
-  m_xContext('x',((AppsContainer *)container)->globalContext()),
   m_listController(&m_listFooter, snapshot->functionStore(), &m_listHeader, &m_listFooter),
   m_listFooter(&m_listHeader, &m_listController, &m_listController, ButtonRowController::Position::Bottom, ButtonRowController::Style::EmbossedGrey),
   m_listHeader(&m_listStackViewController, &m_listFooter, &m_listController),
   m_listStackViewController(&m_tabViewController, &m_listHeader),
-  m_graphController(&m_graphAlternateEmptyViewController, snapshot->functionStore(), snapshot->graphRange(), snapshot->cursor(), snapshot->modelVersion(), snapshot->rangeVersion(), snapshot->angleUnitVersion(), &m_graphHeader),
+  m_graphController(&m_graphAlternateEmptyViewController, snapshot->functionStore(), snapshot->graphRange(), snapshot->cursor(), snapshot->indexFunctionSelectedByCursor(), snapshot->modelVersion(), snapshot->rangeVersion(), snapshot->angleUnitVersion(), &m_graphHeader),
   m_graphAlternateEmptyViewController(&m_graphHeader, &m_graphController, &m_graphController),
   m_graphHeader(&m_graphStackViewController, &m_graphAlternateEmptyViewController, &m_graphController),
   m_graphStackViewController(&m_tabViewController, &m_graphHeader),
@@ -71,19 +70,12 @@ App::App(Container * container, Snapshot * snapshot) :
   m_valuesHeader(&m_valuesStackViewController, &m_valuesAlternateEmptyViewController, &m_valuesController),
   m_valuesStackViewController(&m_tabViewController, &m_valuesHeader),
   m_tabViewController(&m_inputViewController, snapshot, &m_listStackViewController, &m_graphStackViewController, &m_valuesStackViewController),
-  m_inputViewController(&m_modalViewController, &m_tabViewController, this)
+  m_inputViewController(&m_modalViewController, &m_tabViewController, this, this)
 {
 }
 
 InputViewController * App::inputViewController() {
   return &m_inputViewController;
-}
-
-Context * App::localContext() {
-  if (m_tabViewController.activeTab() == 0) {
-    return &m_xContext;
-  }
-  return TextFieldDelegateApp::localContext();
 }
 
 const char * App::XNT() {
